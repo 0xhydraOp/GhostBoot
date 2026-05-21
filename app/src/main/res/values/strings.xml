@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GhostBoot</string>
+    <string name="service_running">Protecting target apps</string>
+    <string name="btn_start_service">Start GhostBoot Service</string>
+    <string name="btn_select_apps">Select Target Apps</string>
+    <string name="btn_settings">Settings</string>
+    <string name="settings_bootloader">Bootloader spoof</string>
+    <string name="settings_root_hide">Root hide level</string>
+    <string name="settings_lsposed">LSPosed hide</string>
+    <string name="settings_keybox">Keybox rotation</string>
+    <string name="settings_stealth">Stealth mode</string>
+    <string name="settings_autostart">Auto-start on boot</string>
+    <string name="settings_notification">Notification mode</string>
+</resources>

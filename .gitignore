@@ -1,0 +1,40 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradlew
+!gradlew.bat
+
+# Android / APK
+app/build/
+*.apk
+*.aab
+*.ap_
+
+# Native build artifacts
+native/libs/
+native/obj/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project (sensitive / local)
+local.properties
+*.keystore
+*.jks
+
+# Release artifacts (built locally)
+release/*.apk
+release/*.zip
+
+# NDK / SDK (large binaries)
+android-ndk-*/
+android-sdk/

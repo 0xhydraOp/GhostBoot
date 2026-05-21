@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GhostBoot" parent="Theme.Material3.DayNight.NoActionBar" />
+    <color name="ghostboot_primary">#FF1565C0</color>
+    <color name="ic_launcher_background">#FF121212</color>
+</resources>
