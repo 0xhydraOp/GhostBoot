@@ -1,15 +1,15 @@
-GhostBoot v1.0 — Per-app bootloader spoof & root hide for Android 10-15.
+## v1.0.1 — Crash Fix
 
-**Installation:**
-1. Flash ghostboot-v1.0.zip in Magisk/KernelSU/APatch
-2. Reboot
-3. Install ghostboot-companion-debug.apk
-4. Open GhostBoot, select banking apps, start service
+Fixes crash on ARM64 Android 14+ when hooking target apps.
 
-**Requirements:** Magisk 26.0+ (Zygisk), Android 10-15, arm64-v8a
+**What was wrong:**
+1. `__builtin___clear_cache` on GOT data addresses triggered MTE/tagged-pointer abort in libc
+2. `mprotect` return value was unchecked — if page couldn't be made writable (SELinux/seccomp), write caused SIGSEGV
 
-**What it does:**
-- Spoofs bootloader properties (ro.boot.verifiedbootstate → green)
-- Hides /data/adb, su binaries, LSPosed files from target apps
-- Per-app targeting via companion app
-- Zero traces after app closes
+**What changed:**
+- Removed `__builtin___clear_cache` call (not needed for GOT data writes; mprotect barriers suffice)
+- Check `mprotect` return value; skip GOT entry gracefully on failure
+- Null-guard on `orig_prop_get` before forwarding calls
+- Mount hiding re-enabled
+
+**To update:** Download the new zip, re-flash in Magisk, reboot.
