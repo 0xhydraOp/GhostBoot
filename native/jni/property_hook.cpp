@@ -18,6 +18,10 @@
 #include <cstring>
 #include <cstdio>
 #include <elf.h>
+#include <android/log.h>
+
+#define TAG "GhostBoot"
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
 // Architecture-neutral ELF relocation symbol index
 #if __SIZEOF_POINTER__ == 8
@@ -98,9 +102,11 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
         auto sym_idx = GHOST_ELF_R_SYM(rel->r_info);
         if (!sym_idx) continue;
 
-        // Bounds check: sym_idx must be within the symbol table
-        // (The symbol table size isn't directly available, but 0 is invalid)
+        // Bounds check: verify st_name offset is within reasonable range.
+        // Symbol table size isn't directly parseable from .dynamic, so we
+        // use a heuristic — st_name > 1MB would indicate a corrupt ELF.
         const char* sym_name = strtab + symtab[sym_idx].st_name;
+        if (symtab[sym_idx].st_name > 0x100000) continue;
 
         if (strcmp(sym_name, ctx->sym)) continue;
 
@@ -116,6 +122,8 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
                      PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
             // mprotect failed (SELinux, seccomp, or memory protection).
             // Skip this GOT entry — a crash is worse than a missed hook.
+            LOGW("mprotect(RWX) failed for %s in %s (errno=%d)",
+                 ctx->sym, info->dlpi_name ? info->dlpi_name : "?", errno);
             continue;
         }
 
@@ -140,10 +148,14 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
 
 static bool patch_symbol(const char* sym, void* hook, void** orig) {
     void* real = dlsym(RTLD_DEFAULT, sym);
-    if (!real) return false;
+    if (!real) {
+        LOGW("dlsym(%s) failed", sym);
+        return false;
+    }
     *orig = real;
     GotCtx ctx{sym, real, hook, 0};
     dl_iterate_phdr(got_cb, &ctx);
+    LOGW("patch_symbol(%s): %d GOT entries patched", sym, ctx.patches);
     return ctx.patches > 0;
 }
 

@@ -14,8 +14,8 @@ android {
         applicationId = "com.ghostboot"
         minSdk = 29   // Android 10
         targetSdk = 35 // Android 15
-        versionCode = 100
-        versionName = "1.0.0"
+        versionCode = 102
+        versionName = "1.0.2"
     }
 
     buildTypes {

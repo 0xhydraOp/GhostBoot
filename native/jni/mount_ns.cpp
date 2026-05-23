@@ -27,8 +27,8 @@ static bool hide_file(const char* path) {
 
 static bool hide_dir(const char* path) {
     if (!exists(path)) return true;
-    // Mount empty tmpfs — mode 0755 looks like a normal empty directory
-    if (mount("tmpfs", path, "tmpfs", 0, "size=0,nr_inodes=1,mode=0755") == 0) return true;
+    // Mount empty tmpfs — mode 0755 looks like a normal empty directory.
+    // size=4096 handles kernels that reject size=0.
     return mount("tmpfs", path, "tmpfs", 0, "size=4096,nr_inodes=2,mode=0755") == 0;
 }
 

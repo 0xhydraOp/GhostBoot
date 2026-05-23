@@ -10,11 +10,11 @@ log() { echo "[GhostBoot] $1"; }
 
 check_zygisk() {
     # Check for running Zygisk daemon (Magisk built-in)
-    ps -A 2>/dev/null | grep -q zygisk && { log "Zygisk daemon detected"; return 0; }
+    (ps -A 2>/dev/null || ps -e 2>/dev/null) | grep zygisk >/dev/null 2>&1 && { log "Zygisk daemon detected"; return 0; }
     # Check for ZygiskNext
     [ -d /data/adb/modules/zygisksu ] && { log "ZygiskNext detected"; return 0; }
     # Check Magisk Zygisk property
-    [ "$(getprop persist.sys.zygisk.enable 2>/dev/null)" = "true" ] && { log "Magisk Zygisk property set"; return 0; }
+    [ "$(getprop persist.sys.zygisk.enable 2>/dev/null || true)" = "true" ] && { log "Magisk Zygisk property set"; return 0; }
     # Check if other Zygisk modules are active (implies Zygisk works)
     ls /data/adb/modules/zygisk_shamiko >/dev/null 2>&1 && { log "Zygisk active (Shamiko present)"; return 0; }
     log "WARNING: Zygisk not detected. Module won't function."

@@ -66,14 +66,21 @@ class MainActivity : ComponentActivity() {
 
     private fun loadInstalledApps(): List<AppInfo> {
         val pm = packageManager
+        // System packages that must never be targeted (crash risk)
+        val systemBlacklist = setOf("android", "com.android.", "com.google.android.gms")
         return pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || isBankingApp(it.packageName) }
+            .filter { app ->
+                val pkg = app.packageName
+                if (systemBlacklist.any { pkg.startsWith(it) }) return@filter false
+                app.flags and ApplicationInfo.FLAG_SYSTEM == 0 || isBankingApp(pkg)
+            }
             .sortedBy { pm.getApplicationLabel(it).toString().lowercase() }
             .map { AppInfo(it.packageName, pm.getApplicationLabel(it).toString()) }
     }
 
     private fun isBankingApp(pkg: String): Boolean {
-        val banking = listOf(
+        // Exact package match — substring matching causes false positives
+        val banking = setOf(
             "com.google.android.apps.nbu.paisa.user",   // Google Pay
             "com.phonepe.app",                            // PhonePe
             "net.one97.paytm",                            // Paytm
@@ -92,7 +99,7 @@ class MainActivity : ComponentActivity() {
             "com.kotak.kmbl",                            // Kotak
             "com.bankofbaroda.mobile"                    // Bank of Baroda
         )
-        return banking.any { pkg.contains(it, ignoreCase = true) }
+        return pkg in banking
     }
 
     private fun saveTargets() {

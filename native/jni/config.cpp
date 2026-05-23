@@ -65,6 +65,8 @@ void TargetConfig::clear() {
     save();
 }
 const std::unordered_set<std::string>& TargetConfig::list() const {
+    // WARNING: returned reference is only valid while the caller holds mutex_.
+    // Caller MUST copy the set before releasing the lock.
     std::lock_guard<std::mutex> lk(mutex_);
     return packages_;
 }

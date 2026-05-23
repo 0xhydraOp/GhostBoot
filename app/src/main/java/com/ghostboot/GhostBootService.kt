@@ -23,11 +23,11 @@ class GhostBootService : Service() {
         const val ACTION_START = "com.ghostboot.START"
         const val ACTION_STOP  = "com.ghostboot.STOP"
         const val NOTIFICATION_ID = 1001
-        const val SOCKET_PATH = "/data/adb/ghostboot/ghostboot.sock"
     }
 
     private val handler = Handler(Looper.getMainLooper())
     private var targetCheckRunnable: Runnable? = null
+    private var lastWrittenList: String? = null  // avoid redundant I/O
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -55,21 +55,24 @@ class GhostBootService : Service() {
         val targets = prefs.getStringSet("targets", emptySet()) ?: emptySet()
         if (targets.isEmpty()) return
 
+        val list = targets.joinToString("\n") { it }
+        // Skip write if list hasn't changed since last sync
+        if (list == lastWrittenList) return
+
         // Run su in background thread — blocking main thread = ANR
         Thread {
             try {
-                val list = targets.joinToString("\n") { it }
                 val cmd = "mkdir -p /data/adb/ghostboot && " +
                           "cat > /data/adb/ghostboot/targets.conf && " +
                           "chmod 600 /data/adb/ghostboot/targets.conf"
                 val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-                // Write the list to su's stdin instead of embedding in shell string
                 process.outputStream.bufferedWriter().use { writer ->
                     writer.write("# GhostBoot targets\n")
                     writer.write(list)
                     writer.write("\n")
                 }
                 process.waitFor()
+                lastWrittenList = list
             } catch (_: Exception) { }
         }.start()
     }

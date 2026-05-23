@@ -1,6 +1,6 @@
 id=ghostboot
 name=GhostBoot
-version=v1.0
-versionCode=100
-author=GhostBoot
-description=Bootloader spoof & root hide via Zygisk. Per-app mount namespace isolation. No Xposed dependency — runs alongside LSPosed. Hides Magisk + LSPosed from target banking apps. Android 10-15.
+version=v1.0.2
+versionCode=102
+author=0xhydraOp
+description=Bootloader spoof & root hide via Zygisk (Magisk/KernelSU/APatch). Per-app mount namespace isolation. Hides Magisk + LSPosed from banking apps. Android 10-15.

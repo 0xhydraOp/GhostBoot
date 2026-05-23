@@ -1,36 +1,23 @@
-# GhostBoot ProGuard rules
+# GhostBoot ProGuard Rules
+# Keep DataStore preferences keys (serialized by name)
+-keepclassmembers class com.ghostboot.settings.SettingsManager$Companion {
+    private static final androidx.datastore.preferences.core.Preferences$Key *;
+}
 
-# Keep all GhostBoot classes (Application, Service, Receiver, Activity)
--keep class com.ghostboot.** { *; }
+# Keep Compose functions and state
 -keepclassmembers class * {
-    native <methods>;
+    @androidx.compose.runtime.Composable <methods>;
 }
 
-# Compose
--dontwarn androidx.compose.**
--keep class androidx.compose.** { *; }
+# Keep application class
+-keep class com.ghostboot.App { *; }
 
-# DataStore
--keep class androidx.datastore.** { *; }
--keepclassmembers class * extends androidx.datastore.preferences.protobuf.GeneratedMessageLite {
-    <fields>;
-}
+# Keep data classes used in serialization
+-keep class com.ghostboot.AppInfo { *; }
+-keep class com.ghostboot.settings.GhostBootSettings { *; }
+-keep class com.ghostboot.settings.RootHideLevel { *; }
+-keep class com.ghostboot.settings.DetectionMethod { *; }
+-keep class com.ghostboot.settings.NotificationMode { *; }
 
-# Coroutines
--keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
--keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
-
-# General Android
--keepattributes *Annotation*
--keepattributes SourceFile,LineNumberTable
--keep public class * extends android.app.Application
--keep public class * extends android.app.Service
--keep public class * extends android.content.BroadcastReceiver
--keep public class * extends android.app.Activity
-
-# Remove logging in release builds
--assumenosideeffects class android.util.Log {
-    public static *** d(...);
-    public static *** v(...);
-    public static *** i(...);
-}
+# Keep BroadcastReceiver registered in manifest
+-keep class com.ghostboot.BootReceiver { *; }
