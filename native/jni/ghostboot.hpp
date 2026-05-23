@@ -72,7 +72,7 @@ public:
     void add(const std::string& package);
     void remove(const std::string& package);
     void clear();
-    const std::unordered_set<std::string>& list() const;
+    std::unordered_set<std::string> list() const;
 
 private:
     TargetConfig() = default;

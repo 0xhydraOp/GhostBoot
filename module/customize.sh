@@ -21,7 +21,9 @@ check_zygisk() {
 }
 
 detect_arch() {
-    case "$(getprop ro.product.cpu.abi 2>/dev/null)" in
+    local abi
+    abi="$(getprop ro.product.cpu.abi 2>/dev/null || true)"
+    case "${abi:-arm64-v8a}" in
         arm64-v8a) echo arm64-v8a ;;  armeabi*) echo armeabi-v7a ;;
         x86_64)    echo x86_64    ;;  x86)      echo x86 ;;
         *)         echo arm64-v8a ;;
@@ -40,7 +42,7 @@ selinux_fix() {
     [ "$(getenforce 2>/dev/null)" = "Enforcing" ] && chcon -R u:object_r:magisk_file:s0 "$WORK_DIR" 2>/dev/null || true
 }
 
-log "GhostBoot v1.0 installing..."
+log "GhostBoot v1.0.1 installing..."
 check_zygisk
 ARCH=$(detect_arch)
 log "Architecture: $ARCH"

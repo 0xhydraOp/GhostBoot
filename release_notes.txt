@@ -1,15 +1,30 @@
-## v1.0.1 — Crash Fix
+## v1.0.2 — Code Review Fixes (17 improvements)
 
-Fixes crash on ARM64 Android 14+ when hooking target apps.
+**All fixes from complete code audit applied.** 0 compile warnings. Full logcat logging.
 
-**What was wrong:**
-1. `__builtin___clear_cache` on GOT data addresses triggered MTE/tagged-pointer abort in libc
-2. `mprotect` return value was unchecked — if page couldn't be made writable (SELinux/seccomp), write caused SIGSEGV
+### Crash/stability fixes
+- `ps -A` fallback to `ps -e` for older ROMs (Zygisk detection)
+- `st_name` bounds check in GOT patcher (corrupt ELF defense)
+- `apply_property_hooks` return value now checked
+- `mprotect` failure logged with errno for diagnostics
 
-**What changed:**
-- Removed `__builtin___clear_cache` call (not needed for GOT data writes; mprotect barriers suffice)
-- Check `mprotect` return value; skip GOT entry gracefully on failure
-- Null-guard on `orig_prop_get` before forwarding calls
-- Mount hiding re-enabled
+### Correctness fixes
+- Exact package matching (no more substring false positives)
+- System app blacklist (prevents accidental system package targeting)
+- Target list write deduplication (no redundant root-shell I/O every 60s)
+- Removed redundant tmpfs `size=0` fallback
 
-**To update:** Download the new zip, re-flash in Magisk, reboot.
+### Code quality
+- Native Android logging via `__android_log_print` (tag: GhostBoot)
+- `list()` lifetime documented in config.cpp
+- Dead code removed (`g_env`, `SOCKET_PATH`)
+- ProGuard keep rules for DataStore + Compose
+- `service.sh` retry loop (5 attempts for PackageManager readiness)
+- `customize.sh` getprop guards for `set -eu` safety
+
+### Version bumps
+- module.prop: v1.0 → v1.0.2 (versionCode 102)
+- APK: versionCode 100 → 102, versionName 1.0.0 → 1.0.2
+- Android.mk: `-llog` added
+
+**To update:** Download the new zip, re-flash in Magisk, reboot. Companion APK auto-detects targets and now logs via `adb logcat -s GhostBoot`.

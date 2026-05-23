@@ -1,19 +1,11 @@
-v1.0.2: Code review fixes - 17 improvements
+v1.0.2 — Comprehensive code review fixes
 
-- ps -A fallback for older ROMs (customize.sh)
-- st_name bounds check in GOT patcher
-- Return value check on apply_property_hooks
-- Exact package matching (no substring false positives)
-- System app blacklist (prevent accidental system hook)
-- Target list write deduplication (no redundant I/O)
-- Removed dead code (g_env, SOCKET_PATH)
-- Native Android logging (logcat tag GhostBoot)
-- mprotect failure logging with errno
-- service.sh retry loop (5 attempts)
-- customize.sh getprop guards for set -eu safety
-- Removed redundant tmpfs size=0 fallback
-- config.cpp list() lifetime documented
-- ProGuard keep rules for DataStore + Compose
-- module.prop bumped to v1.0.2
-- APK versionCode bumped to 102
-- Android.mk now links -llog
+- customize.sh: ps -A fallback (ps -e) for minimal shells; getprop || true guards
+- service.sh: retry loop (5 attempts) instead of fixed sleep
+- property_hook.cpp: st_name bounds check (heuristic > 1MB); logcat logging via __android_log_print
+- main.cpp: check apply_property_hooks return; removed dead g_env; logcat logging
+- config.cpp: list() now returns copy (was dangling reference under lock)
+- ghostboot.hpp: list() signature changed to return by value
+- MainActivity.kt: exact package match for banking detection; system package blacklist
+- GhostBootService.kt: dedup syncTargets (skip write if unchanged); removed dead SOCKET_PATH
+- module.prop: version bump to v1.0.2
