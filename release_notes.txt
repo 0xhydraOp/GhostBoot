@@ -1,30 +1,34 @@
-## v1.0.2 — Code Review Fixes (17 improvements)
+## v1.0.2 — Comprehensive Code Review Fixes
 
-**All fixes from complete code audit applied.** 0 compile warnings. Full logcat logging.
+17 improvements from full code audit. Fixes include crash guards, robustness improvements, dead code removal, and battery optimizations.
 
-### Crash/stability fixes
-- `ps -A` fallback to `ps -e` for older ROMs (Zygisk detection)
-- `st_name` bounds check in GOT patcher (corrupt ELF defense)
-- `apply_property_hooks` return value now checked
-- `mprotect` failure logged with errno for diagnostics
+### Native C++ (Zygisk module)
+| Fix | File |
+|-----|------|
+| `ps -A` fallback to `ps -e` for older ROMs | customize.sh |
+| `getprop` `\|\| true` guards for `set -eu` safety | customize.sh |
+| `st_name` offset bounds check (>1MB heuristic) | property_hook.cpp |
+| logcat logging via `__android_log_print` | property_hook.cpp, main.cpp |
+| Check `apply_property_hooks` return value | main.cpp |
+| Removed dead `g_env` pointer | main.cpp |
+| `list()` returns copy instead of dangling reference | config.cpp, ghostboot.hpp |
+| `mprotect` failure logging with errno | property_hook.cpp |
 
-### Correctness fixes
-- Exact package matching (no more substring false positives)
-- System app blacklist (prevents accidental system package targeting)
-- Target list write deduplication (no redundant root-shell I/O every 60s)
-- Removed redundant tmpfs `size=0` fallback
+### Shell scripts
+| Fix | File |
+|-----|------|
+| Retry loop (5 attempts) for `am startservice` | service.sh |
+| `ps -A` fallback `ps -e` for Zygisk detection | customize.sh |
 
-### Code quality
-- Native Android logging via `__android_log_print` (tag: GhostBoot)
-- `list()` lifetime documented in config.cpp
-- Dead code removed (`g_env`, `SOCKET_PATH`)
-- ProGuard keep rules for DataStore + Compose
-- `service.sh` retry loop (5 attempts for PackageManager readiness)
-- `customize.sh` getprop guards for `set -eu` safety
+### Kotlin companion app
+| Fix | File |
+|-----|------|
+| Exact package match for banking detection | MainActivity.kt |
+| System package blacklist (prevents accidental system hook) | MainActivity.kt |
+| Target list write deduplication (no redundant I/O) | GhostBootService.kt |
+| Removed dead `SOCKET_PATH` constant | GhostBootService.kt |
 
-### Version bumps
-- module.prop: v1.0 → v1.0.2 (versionCode 102)
-- APK: versionCode 100 → 102, versionName 1.0.0 → 1.0.2
-- Android.mk: `-llog` added
-
-**To update:** Download the new zip, re-flash in Magisk, reboot. Companion APK auto-detects targets and now logs via `adb logcat -s GhostBoot`.
+### Metadata
+| Fix | File |
+|-----|------|
+| Version bump to v1.0.2 (versionCode 102) | module.prop |
