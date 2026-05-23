@@ -1,0 +1,15 @@
+GhostBoot v1.0 — Per-app bootloader spoof & root hide for Android 10-15.
+
+**Installation:**
+1. Flash ghostboot-v1.0.zip in Magisk/KernelSU/APatch
+2. Reboot
+3. Install ghostboot-companion-debug.apk
+4. Open GhostBoot, select banking apps, start service
+
+**Requirements:** Magisk 26.0+ (Zygisk), Android 10-15, arm64-v8a
+
+**What it does:**
+- Spoofs bootloader properties (ro.boot.verifiedbootstate → green)
+- Hides /data/adb, su binaries, LSPosed files from target apps
+- Per-app targeting via companion app
+- Zero traces after app closes

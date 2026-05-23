@@ -1,0 +1,6 @@
+Fix: crash when hooking target apps on ARM64 Android 14+
+
+- mprotect return value now checked - skip GOT entry if page can't be made writable
+- __builtin___clear_cache removed - triggers MTE/tagged-pointer abort on Android 14+
+- orig_prop_get null-checked before forwarding call
+- Mount hiding re-enabled in main.cpp

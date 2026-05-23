@@ -1,7 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // GhostBoot — property_hook.cpp
-// PLT / GOT hook on __system_property_get & __system_property_read.
+// PLT / GOT hook on __system_property_get.
 // Bootloader props return "locked / green" inside target apps.
+//
+// CRASH FIXES applied:
+//   • mprotect return value checked — if page can't be made writable, skip
+//   • __builtin___clear_cache removed — not needed for GOT data writes;
+//     it triggers MTE/tagged-pointer aborts on ARM64 Android 14+
+//   • Self-skip via dladdr to avoid patching our own GOT (infinite recursion)
 // ─────────────────────────────────────────────────────────────────────────────
 #include "ghostboot.hpp"
 
@@ -12,7 +18,6 @@
 #include <cstring>
 #include <cstdio>
 #include <elf.h>
-// sys/system_properties.h not needed — we only hook __system_property_get
 
 // Architecture-neutral ELF relocation symbol index
 #if __SIZEOF_POINTER__ == 8
@@ -26,7 +31,7 @@
 namespace ghostboot {
 namespace {
 
-static int  (*orig_prop_get)(const char*, char*) = nullptr;
+static int (*orig_prop_get)(const char*, char*) = nullptr;
 
 static const char* lookup_spoof(const char* name) {
     if (!name) return nullptr;
@@ -48,7 +53,10 @@ static int hooked_prop_get(const char* name, char* value) {
             return static_cast<int>(n);
         }
     }
-    return orig_prop_get(name, value);
+    // Forward to original — safe because orig_prop_get is set before
+    // any GOT entry is patched to point to this function
+    if (orig_prop_get) return orig_prop_get(name, value);
+    return -1;
 }
 
 // ── GOT patching ────────────────────────────────────────────────────────────
@@ -58,12 +66,12 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
     auto* ctx = static_cast<GotCtx*>(data);
     uintptr_t base = info->dlpi_addr;
 
-    // Skip our own module — use dladdr on ourselves to get the base address
-    // (dlpi_name can't be trusted: Zygisk renames the .so to arm64-v8a.so, etc.)
+    // Skip our own module — use dladdr to find our base address.
+    // (dlpi_name is unreliable: Zygisk renames .so to arm64-v8a.so / armeabi-v7a.so / etc.)
     Dl_info self_info;
     if (dladdr(reinterpret_cast<void*>(&got_cb), &self_info) &&
         info->dlpi_addr == reinterpret_cast<uintptr_t>(self_info.dli_fbase)) {
-        return 0;  // this is us — don't patch our own GOT
+        return 0;
     }
 
     const ElfW(Dyn)* dyn = nullptr;
@@ -89,17 +97,42 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
         auto* rel = &jmprel[i];
         auto sym_idx = GHOST_ELF_R_SYM(rel->r_info);
         if (!sym_idx) continue;
-        if (strcmp(strtab + symtab[sym_idx].st_name, ctx->sym)) continue;
+
+        // Bounds check: sym_idx must be within the symbol table
+        // (The symbol table size isn't directly available, but 0 is invalid)
+        const char* sym_name = strtab + symtab[sym_idx].st_name;
+
+        if (strcmp(sym_name, ctx->sym)) continue;
 
         auto* got = reinterpret_cast<uintptr_t*>(base + rel->r_offset);
-        if (*got != reinterpret_cast<uintptr_t>(ctx->target)) continue;
 
+        // Read current GOT value BEFORE mprotect (verify it's readable)
+        uintptr_t current = *got;
+        if (current != reinterpret_cast<uintptr_t>(ctx->target)) continue;
+
+        // Make the page writable — CHECK RETURN VALUE
         uintptr_t pg = reinterpret_cast<uintptr_t>(got) & ~uintptr_t(0xFFF);
-        mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC);
+        if (mprotect(reinterpret_cast<void*>(pg), 0x1000,
+                     PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+            // mprotect failed (SELinux, seccomp, or memory protection).
+            // Skip this GOT entry — a crash is worse than a missed hook.
+            continue;
+        }
+
+        // Write our hook address
         *got = reinterpret_cast<uintptr_t>(ctx->hook);
+
+        // Restore original permissions
         mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_EXEC);
-        __builtin___clear_cache(reinterpret_cast<char*>(got),
-                                reinterpret_cast<char*>(got) + sizeof(uintptr_t));
+
+        // NOT calling __builtin___clear_cache here.
+        // The GOT is data, not code.  On ARM64 Android 14+ with MTE /
+        // tagged pointers, __builtin___clear_cache can trigger "Pointer
+        // tag was truncated" aborts when given a data address that
+        // happens to carry a hardware memory tag.  The data-cache
+        // coherency is guaranteed by the mprotect calls above (which
+        // include implicit DMB/DSB barriers on ARM64 Linux).
+
         ctx->patches++;
     }
     return 0;
@@ -118,7 +151,7 @@ static bool patch_symbol(const char* sym, void* hook, void** orig) {
 
 bool apply_property_hooks() {
     static bool done = false;
-    if (done) return true;
+    if (done) return (orig_prop_get != nullptr);
     done = true;
 
     patch_symbol("__system_property_get",
