@@ -92,7 +92,7 @@ notification mode, auto-start toggle) are stored but not yet enforced — see
 
 ## Quick install
 
-1. Download `ghostboot-v1.0.2.zip` and `ghostboot-companion-debug.apk` from the latest release
+1. Download `ghostboot-v1.1.0.zip` and `ghostboot-companion-debug.apk` from the latest release
 2. Flash the zip in your Magisk / KernelSU / APatch manager
 3. Reboot
 4. Install the companion APK
@@ -119,7 +119,7 @@ cd ..
 # 3. Package Magisk module zip (Linux/macOS helper; on Windows use Compress-Archive)
 mkdir -p release
 cp app/build/outputs/apk/debug/app-debug.apk release/ghostboot-companion-debug.apk
-cd module && zip -r ../release/ghostboot-v1.0.2.zip . -x "*.DS_Store"
+cd module && zip -r ../release/ghostboot-v1.1.0.zip . -x "*.DS_Store"
 ```
 
 ## Architecture
@@ -127,7 +127,7 @@ cd module && zip -r ../release/ghostboot-v1.0.2.zip . -x "*.DS_Store"
 ```
 GhostBoot/
 ├── module/                 # Magisk module files (flashable)
-│   ├── module.prop         # v1.0.2, versionCode 102
+│   ├── module.prop         # v1.1.0, versionCode 103
 │   ├── customize.sh        # Install-time setup
 │   ├── post-fs-data.sh     # Early-boot setup
 │   ├── service.sh          # Post-boot companion launch

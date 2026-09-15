@@ -42,7 +42,7 @@ selinux_fix() {
     [ "$(getenforce 2>/dev/null)" = "Enforcing" ] && chcon -R u:object_r:magisk_file:s0 "$WORK_DIR" 2>/dev/null || true
 }
 
-log "GhostBoot v1.0.2 installing..."
+log "GhostBoot v1.1.0 installing..."
 check_zygisk
 ARCH=$(detect_arch)
 log "Architecture: $ARCH"

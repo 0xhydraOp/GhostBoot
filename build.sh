@@ -42,7 +42,7 @@ echo ">>> Step 3/3: Packaging Magisk module..."
 OUT="$TOP/release"
 mkdir -p "$OUT"
 
-MODULE_ZIP="$OUT/ghostboot-v1.0.2.zip"
+MODULE_ZIP="$OUT/ghostboot-v1.1.0.zip"
 cd "$TOP/module"
 zip -r "$MODULE_ZIP" . \
     -x "*.DS_Store" \
@@ -54,7 +54,7 @@ echo "========================================="
 echo " Build complete!"
 echo " Module zip: $MODULE_ZIP"
 if [ -f "$TOP/app/build/outputs/apk/release/app-release.apk" ]; then
-    cp "$TOP/app/build/outputs/apk/release/app-release.apk" "$OUT/ghostboot-companion-v1.0.2.apk"
-    echo " Companion APK: $OUT/ghostboot-companion-v1.0.2.apk"
+    cp "$TOP/app/build/outputs/apk/release/app-release.apk" "$OUT/ghostboot-companion-v1.1.0.apk"
+    echo " Companion APK: $OUT/ghostboot-companion-v1.1.0.apk"
 fi
 echo "========================================="
