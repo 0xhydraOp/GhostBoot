@@ -49,6 +49,10 @@
             android:name=".GhostBootService"
             android:exported="true"
             android:foregroundServiceType="specialUse">
+            <!-- Required on Android 14+: specialUse must declare a use-case subtype -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Per-app root hiding and bootloader spoofing for user-selected banking apps." />
             <intent-filter>
                 <action android:name="com.ghostboot.START" />
                 <action android:name="com.ghostboot.STOP" />

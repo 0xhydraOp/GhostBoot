@@ -77,7 +77,9 @@ public:
 private:
     TargetConfig() = default;
     std::unordered_set<std::string> packages_;
-    mutable std::mutex mutex_;
+    mutable std::recursive_mutex mutex_;
+
+    void saveLocked() const;
 };
 
 // ── Hook API ────────────────────────────────────────────────────────────────

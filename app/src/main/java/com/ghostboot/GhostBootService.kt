@@ -53,9 +53,10 @@ class GhostBootService : Service() {
     private fun syncTargets() {
         val prefs = getSharedPreferences("ghostboot_prefs", Context.MODE_PRIVATE)
         val targets = prefs.getStringSet("targets", emptySet()) ?: emptySet()
-        if (targets.isEmpty()) return
 
-        val list = targets.joinToString("\n") { it }
+        // Write even when empty: clearing all apps must clear the native
+        // list, otherwise stale targets stay hooked after deselect.
+        val list = targets.sorted().joinToString("\n")
         // Skip write if list hasn't changed since last sync
         if (list == lastWrittenList) return
 

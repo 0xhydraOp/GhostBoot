@@ -21,7 +21,7 @@ TargetConfig& TargetConfig::instance() {
 }
 
 void TargetConfig::load() {
-    std::lock_guard<std::mutex> lk(mutex_);
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
     packages_.clear();
     std::ifstream f(config_file_path());
     if (!f) return;
@@ -37,7 +37,11 @@ void TargetConfig::load() {
 }
 
 void TargetConfig::save() {
-    std::lock_guard<std::mutex> lk(mutex_);
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
+    saveLocked();
+}
+
+void TargetConfig::saveLocked() const {
     mkdir(work_dir_path(), 0700);
     std::ofstream f(config_file_path(), std::ios::trunc);
     if (!f) return;
@@ -48,24 +52,27 @@ void TargetConfig::save() {
 
 bool TargetConfig::is_target(const char* name) const {
     if (!name) return false;
-    std::lock_guard<std::mutex> lk(mutex_);
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
     return packages_.count(name) > 0;
 }
 
 void TargetConfig::add(const std::string& pkg) {
-    { std::lock_guard<std::mutex> lk(mutex_); packages_.insert(pkg); }
-    save();
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
+    packages_.insert(pkg);
+    saveLocked();
 }
 void TargetConfig::remove(const std::string& pkg) {
-    { std::lock_guard<std::mutex> lk(mutex_); packages_.erase(pkg); }
-    save();
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
+    packages_.erase(pkg);
+    saveLocked();
 }
 void TargetConfig::clear() {
-    { std::lock_guard<std::mutex> lk(mutex_); packages_.clear(); }
-    save();
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
+    packages_.clear();
+    saveLocked();
 }
 std::unordered_set<std::string> TargetConfig::list() const {
-    std::lock_guard<std::mutex> lk(mutex_);
+    std::lock_guard<std::recursive_mutex> lk(mutex_);
     return packages_;  // return a copy — safe to use after lock is released
 }
 
