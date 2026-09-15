@@ -7,9 +7,11 @@ package com.ghostboot
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,11 +28,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ghostboot.settings.SettingsScreen
 import com.ghostboot.ui.theme.GhostBootTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 
 class MainActivity : ComponentActivity() {
 
     private val targetPackages = mutableStateListOf<String>()
+    private val installedApps = mutableStateListOf<AppInfo>()
+    private val appsLoading = mutableStateOf(false)
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted or not — service still starts; notification may be hidden */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,12 +51,14 @@ class MainActivity : ComponentActivity() {
         val saved = prefs.getStringSet("targets", emptySet()) ?: emptySet()
         targetPackages.addAll(saved)
 
-        val apps = loadInstalledApps()  // computed once; Activity onCreate is single-call
+        requestNotificationPermissionIfNeeded()
+
         setContent {
             GhostBootTheme {
                 MainScreen(
                     targetPackages = targetPackages,
-                    installedApps = apps,
+                    installedApps = installedApps,
+                    appsLoading = appsLoading.value,
                     onToggleApp = { pkg, enabled ->
                         if (enabled) {
                             if (!targetPackages.contains(pkg)) targetPackages.add(pkg)
@@ -58,10 +71,36 @@ class MainActivity : ComponentActivity() {
                     onOpenSettings = {
                         startActivity(Intent(this, SettingsScreen::class.java))
                     },
+                    onOpenUsageAccess = { openUsageAccessSettings() },
                     onStartService = { startService() }
                 )
             }
         }
+
+        // PackageManager queries can take hundreds of ms — keep off the main thread.
+        appsLoading.value = true
+        lifecycleScope.launch {
+            val apps = withContext(Dispatchers.IO) { loadInstalledApps() }
+            installedApps.clear()
+            installedApps.addAll(apps)
+            appsLoading.value = false
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun openUsageAccessSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        } catch (_: Exception) { }
     }
 
     private fun loadInstalledApps(): List<AppInfo> {
@@ -146,8 +185,10 @@ data class AppInfo(
 fun MainScreen(
     targetPackages: List<String>,
     installedApps: List<AppInfo>,
+    appsLoading: Boolean = false,
     onToggleApp: (String, Boolean) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenUsageAccess: () -> Unit = {},
     onStartService: () -> Unit
 ) {
     var showAppPicker by remember { mutableStateOf(false) }
@@ -206,6 +247,18 @@ fun MainScreen(
 
             if (showAppPicker) {
                 Spacer(Modifier.height(8.dp))
+                if (appsLoading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Loading apps...")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                } else {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -256,6 +309,7 @@ fun MainScreen(
                         }
                     }
                 }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -266,6 +320,16 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Start GhostBoot Service")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Usage Access grant — required for foreground-app monitoring
+            OutlinedButton(
+                onClick = onOpenUsageAccess,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Grant Usage Access")
             }
         }
     }

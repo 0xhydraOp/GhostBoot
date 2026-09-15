@@ -15,6 +15,7 @@
 #include <link.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <errno.h>
 #include <cstring>
 #include <cstdio>
 #include <elf.h>
@@ -116,9 +117,13 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
         uintptr_t current = *got;
         if (current != reinterpret_cast<uintptr_t>(ctx->target)) continue;
 
-        // Make the page writable — CHECK RETURN VALUE
-        uintptr_t pg = reinterpret_cast<uintptr_t>(got) & ~uintptr_t(0xFFF);
-        if (mprotect(reinterpret_cast<void*>(pg), 0x1000,
+        // Make the page writable — CHECK RETURN VALUE.
+        // Page size is runtime-detected: Android 15+ supports 16K pages,
+        // where a hardcoded 4K mask/len only covers part of the page.
+        long ps = sysconf(_SC_PAGESIZE);
+        if (ps <= 0) ps = 0x1000;
+        uintptr_t pg = reinterpret_cast<uintptr_t>(got) & ~(uintptr_t)(ps - 1);
+        if (mprotect(reinterpret_cast<void*>(pg), (size_t)ps,
                      PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
             // mprotect failed (SELinux, seccomp, or memory protection).
             // Skip this GOT entry — a crash is worse than a missed hook.
@@ -131,7 +136,7 @@ static int got_cb(struct dl_phdr_info* info, size_t, void* data) {
         *got = reinterpret_cast<uintptr_t>(ctx->hook);
 
         // Restore original permissions
-        mprotect(reinterpret_cast<void*>(pg), 0x1000, PROT_READ | PROT_EXEC);
+        mprotect(reinterpret_cast<void*>(pg), (size_t)ps, PROT_READ | PROT_EXEC);
 
         // NOT calling __builtin___clear_cache here.
         // The GOT is data, not code.  On ARM64 Android 14+ with MTE /
@@ -163,13 +168,17 @@ static bool patch_symbol(const char* sym, void* hook, void** orig) {
 
 bool apply_property_hooks() {
     static bool done = false;
-    if (done) return (orig_prop_get != nullptr);
+    static bool ok = false;
+    if (done) return ok;
     done = true;
 
-    patch_symbol("__system_property_get",
-                 reinterpret_cast<void*>(hooked_prop_get),
-                 reinterpret_cast<void**>(&orig_prop_get));
-    return orig_prop_get != nullptr;
+    // patch_symbol returns true only if >=1 GOT entry was actually
+    // rewritten. dlsym alone succeeding means nothing — without a patch
+    // the spoof is inactive, so report failure honestly.
+    ok = patch_symbol("__system_property_get",
+                  reinterpret_cast<void*>(hooked_prop_get),
+                  reinterpret_cast<void**>(&orig_prop_get));
+    return ok;
 }
 
 } // namespace ghostboot
