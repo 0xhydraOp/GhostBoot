@@ -6,7 +6,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE       := ghostboot
-LOCAL_SRC_FILES    := main.cpp property_hook.cpp mount_ns.cpp config.cpp
+LOCAL_SRC_FILES    := main.cpp property_hook.cpp mount_ns.cpp config.cpp java_hooks.cpp proc_filter.cpp
 LOCAL_CPPFLAGS     := -std=c++17 -O2 -fvisibility=hidden -fno-rtti -fno-exceptions \
                       -Wall -Wextra -Wno-unused-parameter -fPIC -DANDROID
 LOCAL_LDLIBS       := -llog

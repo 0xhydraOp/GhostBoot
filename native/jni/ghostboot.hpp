@@ -56,6 +56,19 @@ inline constexpr const char* kHidePaths[] = {
     "/system/app/Superuser",
     "/system/app/SuperSU",
     "/system/app/Magisk",
+    "/system/priv-app/SuperSU",
+    "/system/priv-app/Magisk",
+
+    // Root manager private data dirs (hidden per-app via tmpfs)
+    "/data/data/com.topjohnwu.magisk",
+    "/data/data/org.lsposed.manager",
+    "/data/data/de.robv.android.xposed.installer",
+    "/data/data/com.solohsu.android.edxp.manager",
+    "/data/data/org.meowcat.edxposed.manager",
+
+    // Riru/Xposed misc traces outside /data/adb
+    "/data/misc/riru",
+    "/data/misc/riru-modules",
     nullptr
 };
 
@@ -82,12 +95,40 @@ private:
     void saveLocked() const;
 };
 
+// ── Companion-driven settings (settings.conf) ───────────────────────────────
+// Written by the companion app alongside targets.conf. Missing file or keys
+// fall back to the defaults below (all protections ON, stealth OFF), so an
+// old install without the new companion keeps working.
+enum class RootHideLevel { Off, Basic, Aggressive };
+
+struct Settings {
+    bool bootloader_spoof = true;
+    RootHideLevel root_hide = RootHideLevel::Basic;
+    bool lsposed_hide = true;
+    bool stealth_mode = false;
+};
+
+// Reload from disk (cheap, small file). Called at onLoad and per specialize
+// so a settings change applies to the next launched target (no reboot).
+void reload_settings();
+// Cached snapshot of the last reload.
+Settings settings();
+// False when stealth_mode is on — use for all logcat output.
+bool logging_enabled();
+
 // ── Hook API ────────────────────────────────────────────────────────────────
 bool apply_property_hooks();
 bool apply_mount_hiding();
+// Proc-visibility filters (mounts/mountinfo always; maps/smaps/cmdline/
+// packages.list on AGGRESSIVE). Best-effort: never fatal on failure.
+bool apply_proc_filters();
+// JNI-level android.os.Build static-field patch (Java sees release-keys/user
+// even though the class was already initialized). No-op without a JVM.
+bool apply_java_build_patch(void* java_vm);
 
 // ── Paths ───────────────────────────────────────────────────────────────────
 const char* work_dir_path();
 const char* config_file_path();
+const char* settings_file_path();
 
 } // namespace ghostboot

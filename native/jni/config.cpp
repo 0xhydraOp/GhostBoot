@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 #include <cstring>
+#include <cctype>
 #include <sys/stat.h>
 #include <cerrno>
 
@@ -14,6 +15,7 @@ namespace ghostboot {
 
 const char* work_dir_path()   { return "/data/adb/ghostboot"; }
 const char* config_file_path() { return "/data/adb/ghostboot/targets.conf"; }
+const char* settings_file_path() { return "/data/adb/ghostboot/settings.conf"; }
 
 TargetConfig& TargetConfig::instance() {
     static TargetConfig cfg;
@@ -74,6 +76,60 @@ void TargetConfig::clear() {
 std::unordered_set<std::string> TargetConfig::list() const {
     std::lock_guard<std::recursive_mutex> lk(mutex_);
     return packages_;  // return a copy — safe to use after lock is released
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+namespace {
+std::recursive_mutex g_settings_mutex;
+Settings g_settings;  // defaults = all protections ON (see header)
+
+std::string trim_copy(const std::string& s) {
+    auto a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    auto b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+bool is_on(const std::string& v) {
+    return v == "1" || v == "true" || v == "on" || v == "yes";
+}
+} // anonymous namespace
+
+void reload_settings() {
+    std::lock_guard<std::recursive_mutex> lk(g_settings_mutex);
+    Settings s;  // start from defaults every time (missing keys stay default)
+    std::ifstream f(settings_file_path());
+    if (f) {
+        std::string line;
+        while (std::getline(f, line)) {
+            line = trim_copy(line);
+            if (line.empty() || line[0] == '#') continue;
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            std::string key = trim_copy(line.substr(0, eq));
+            std::string val = trim_copy(line.substr(eq + 1));
+            for (auto& c : val) c = (char)tolower(c);
+            if (key == "bootloader_spoof")      s.bootloader_spoof = is_on(val);
+            else if (key == "root_hide") {
+                if (val == "off")              s.root_hide = RootHideLevel::Off;
+                else if (val == "aggressive")  s.root_hide = RootHideLevel::Aggressive;
+                else                           s.root_hide = RootHideLevel::Basic;
+            }
+            else if (key == "lsposed_hide")     s.lsposed_hide = is_on(val);
+            else if (key == "stealth_mode")     s.stealth_mode = is_on(val);
+        }
+    }
+    g_settings = s;
+}
+
+Settings settings() {
+    std::lock_guard<std::recursive_mutex> lk(g_settings_mutex);
+    return g_settings;
+}
+
+bool logging_enabled() {
+    std::lock_guard<std::recursive_mutex> lk(g_settings_mutex);
+    return !g_settings.stealth_mode;
 }
 
 } // namespace ghostboot
