@@ -26,9 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ghostboot.settings.SettingsManager
 import com.ghostboot.settings.SettingsScreen
+import com.ghostboot.settings.toConf
 import com.ghostboot.ui.theme.GhostBootTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
@@ -38,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private val targetPackages = mutableStateListOf<String>()
     private val installedApps = mutableStateListOf<AppInfo>()
     private val appsLoading = mutableStateOf(false)
+    private val verifyText = mutableStateOf("Not checked yet")
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -59,6 +63,8 @@ class MainActivity : ComponentActivity() {
                     targetPackages = targetPackages,
                     installedApps = installedApps,
                     appsLoading = appsLoading.value,
+                    verifyText = verifyText.value,
+                    onVerify = { runVerify() },
                     onToggleApp = { pkg, enabled ->
                         if (enabled) {
                             if (!targetPackages.contains(pkg)) targetPackages.add(pkg)
@@ -149,21 +155,55 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncTargetsToNative() {
-        // Write target list via root shell on background thread (avoid ANR)
-        val list = targetPackages.toList()
-        Thread {
+        // Write target list + current settings via root shell (background —
+        // blocking the main thread here would ANR).
+        val list = targetPackages.sorted()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val body = buildString {
+                append("# GhostBoot targets\n")
+                if (list.isNotEmpty()) append(list.joinToString("\n")).append('\n')
+            }
+            RootShell.writeFile(RootShell.TARGETS_PATH, body)
+            // Mirror settings so native gates stay fresh without reboot.
             try {
-                val cmd = "mkdir -p /data/adb/ghostboot && " +
-                          "cat > /data/adb/ghostboot/targets.conf && " +
-                          "chmod 600 /data/adb/ghostboot/targets.conf"
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-                process.outputStream.bufferedWriter().use { writer ->
-                    writer.write("# GhostBoot targets\n")
-                    list.forEach { writer.write("$it\n") }
+                val s = SettingsManager(applicationContext).settingsFlow.first()
+                RootShell.writeFile(RootShell.SETTINGS_PATH, s.toConf())
+            } catch (e: Exception) {
+                android.util.Log.w("GhostBoot", "settings mirror failed", e)
+            }
+        }
+    }
+
+    // Diagnostics: what does the native side actually see on disk?
+    private fun runVerify() {
+        verifyText.value = "Checking..."
+        lifecycleScope.launch(Dispatchers.IO) {
+            val report = buildString {
+                append(if (RootShell.hasRoot()) "root: OK (su granted)\n" else "root: MISSING — grant root to the app\n")
+                val targets = RootShell.readFile(RootShell.TARGETS_PATH)
+                if (targets == null) {
+                    append("targets.conf: NOT READABLE\n")
+                } else {
+                    val entries = targets.lines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                    append("targets.conf: ${entries.size} app(s)\n")
+                    entries.take(10).forEach { append("  • ").append(it).append('\n') }
+                    if (entries.size > 10) append("  … +${entries.size - 10} more\n")
                 }
-                process.waitFor()
-            } catch (_: Exception) { }
-        }.start()
+                val conf = RootShell.readFile(RootShell.SETTINGS_PATH)
+                if (conf == null) {
+                    append("settings.conf: missing (native uses defaults: all ON)\n")
+                } else {
+                    append("settings.conf:\n")
+                    conf.lines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                        .forEach { append("  ").append(it).append('\n') }
+                }
+            }
+            withContext(Dispatchers.Main) { verifyText.value = report.trimEnd() }
+        }
     }
 
     private fun startService() {
@@ -186,6 +226,8 @@ fun MainScreen(
     targetPackages: List<String>,
     installedApps: List<AppInfo>,
     appsLoading: Boolean = false,
+    verifyText: String = "",
+    onVerify: () -> Unit = {},
     onToggleApp: (String, Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenUsageAccess: () -> Unit = {},
@@ -330,6 +372,24 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Grant Usage Access")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Native status diagnostics — what the .so actually sees on disk
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Native status", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(verifyText, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onVerify,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Verify native status")
+                    }
+                }
             }
         }
     }

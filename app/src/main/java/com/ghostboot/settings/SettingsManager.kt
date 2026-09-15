@@ -29,6 +29,15 @@ enum class RootHideLevel { OFF, BASIC, AGGRESSIVE }
 enum class DetectionMethod { USAGE_STATS, ACCESSIBILITY }
 enum class NotificationMode { ON, OFF_, STEALTH }   // OFF_ avoids Kotlin keyword
 
+/** Serialize to the native settings.conf format (KEY=value per line). */
+fun GhostBootSettings.toConf(): String = buildString {
+    append("# GhostBoot settings (written by companion app)\n")
+    append("bootloader_spoof=").append(if (bootloaderSpoof) "1" else "0").append('\n')
+    append("root_hide=").append(rootHide.name.lowercase()).append('\n')
+    append("lsposed_hide=").append(if (lsposedHide) "1" else "0").append('\n')
+    append("stealth_mode=").append(if (stealthMode) "1" else "0").append('\n')
+}
+
 class SettingsManager(private val context: Context) {
 
     companion object {

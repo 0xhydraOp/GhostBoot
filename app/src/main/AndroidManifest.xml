@@ -59,11 +59,14 @@
             </intent-filter>
         </service>
 
-        <!-- Boot receiver -->
+        <!-- Boot receiver (direct-boot aware: ignores LOCKED_BOOT_COMPLETED,
+             acts on BOOT_COMPLETED after unlock when prefs are available) -->
         <receiver
             android:name=".BootReceiver"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="com.ghostboot.BOOT_COMPLETE" />
             </intent-filter>

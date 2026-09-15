@@ -16,6 +16,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import com.ghostboot.settings.SettingsManager
+import com.ghostboot.settings.toConf
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class GhostBootService : Service() {
 
@@ -28,6 +32,7 @@ class GhostBootService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var targetCheckRunnable: Runnable? = null
     private var lastWrittenList: String? = null  // avoid redundant I/O
+    private var lastWrittenSettings: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,32 +62,39 @@ class GhostBootService : Service() {
         // Write even when empty: clearing all apps must clear the native
         // list, otherwise stale targets stay hooked after deselect.
         val list = targets.sorted().joinToString("\n")
-        // Skip write if list hasn't changed since last sync
-        if (list == lastWrittenList) return
+        // Skip write if neither list nor settings changed since last sync
+        if (list == lastWrittenList && lastWrittenSettings != null) return
 
         // Run su in background thread — blocking main thread = ANR
         Thread {
-            try {
-                val cmd = "mkdir -p /data/adb/ghostboot && " +
-                          "cat > /data/adb/ghostboot/targets.conf && " +
-                          "chmod 600 /data/adb/ghostboot/targets.conf"
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-                process.outputStream.bufferedWriter().use { writer ->
-                    writer.write("# GhostBoot targets\n")
-                    writer.write(list)
-                    writer.write("\n")
-                }
-                process.waitFor()
-                lastWrittenList = list
-            } catch (_: Exception) { }
+            val body = buildString {
+                append("# GhostBoot targets\n")
+                if (list.isNotEmpty()) append(list).append('\n')
+            }
+            if (RootShell.writeFile(RootShell.TARGETS_PATH, body)) lastWrittenList = list
+            syncSettingsLocked()
         }.start()
+    }
+
+    // Must run on a background thread (blocks on DataStore + su).
+    private fun syncSettingsLocked() {
+        try {
+            val s = runBlocking { SettingsManager(this@GhostBootService).settingsFlow.first() }
+            val conf = s.toConf()
+            if (conf == lastWrittenSettings) return
+            if (RootShell.writeFile(RootShell.SETTINGS_PATH, conf)) lastWrittenSettings = conf
+        } catch (e: Exception) {
+            android.util.Log.w("GhostBoot", "settings sync failed", e)
+        }
     }
 
     private fun startUsageMonitoring() {
         val runnable = object : Runnable {
             override fun run() {
                 checkForegroundApp()
-                handler.postDelayed(this, 60_000)
+                // Watchdog only — syncs are event-driven (toggle/start), so a
+                // 5-minute cadence is plenty and kinder to battery.
+                handler.postDelayed(this, 300_000)
             }
         }
         targetCheckRunnable = runnable

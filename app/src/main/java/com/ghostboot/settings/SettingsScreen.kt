@@ -16,8 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ghostboot.RootShell
 import com.ghostboot.ui.theme.GhostBootTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsScreen : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,6 +40,15 @@ fun SettingsUI() {
     val manager = remember { SettingsManager(context.applicationContext) }
     val settings by manager.settingsFlow.collectAsStateWithLifecycle(initialValue = GhostBootSettings())
     val scope = rememberCoroutineScope()
+
+    // Mirror every change to the native side (no reboot needed — the .so
+    // re-reads settings.conf on each app fork). Fires once on open too,
+    // which harmlessly rewrites identical content.
+    LaunchedEffect(settings) {
+        withContext(Dispatchers.IO) {
+            RootShell.writeFile(RootShell.SETTINGS_PATH, settings.toConf())
+        }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("GhostBoot Settings") }) }

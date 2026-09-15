@@ -11,6 +11,10 @@ import android.os.Build
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Direct Boot: credential-protected prefs/DataStore aren't available
+        // yet — do nothing and let BOOT_COMPLETED (after unlock) do the work.
+        if (intent.action == Intent.ACTION_LOCKED_BOOT_COMPLETED) return
+
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "com.ghostboot.BOOT_COMPLETE") {
 
