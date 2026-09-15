@@ -65,6 +65,61 @@ static const char* lookup_spoof(const char* name) {
     return nullptr;
 }
 
+static const void* (*orig_prop_find)(const char*) = nullptr;
+static int (*orig_prop_get_bool)(const char*, int) = nullptr;
+static long long (*orig_prop_get_long)(const char*, long long) = nullptr;
+
+// Poison __system_property_find: we must NOT fabricate a prop_info
+// (unsafe), but returning NULL for debug markers forces Java/native
+// fallbacks down the spoofed get/read path instead of the real area.
+static const void* hooked_prop_find(const char* name) {
+    if (name && (!strcmp(name, "ro.debuggable") || !strcmp(name, "ro.secure")))
+        return nullptr;
+    if (orig_prop_find) return orig_prop_find(name);
+    return nullptr;
+}
+
+static int hooked_prop_get_bool(const char* name, int def) {
+    const char* s = lookup_spoof(name);
+    if (s) return (!strcmp(s, "1") || !strcmp(s, "true"));
+    if (orig_prop_get_bool) return orig_prop_get_bool(name, def);
+    return def;
+}
+
+static long long hooked_prop_get_long(const char* name, long long def) {
+    const char* s = lookup_spoof(name);
+    if (s) {
+        long long v = def;
+        sscanf(s, "%lld", &v);
+        return v;
+    }
+    if (orig_prop_get_long) return orig_prop_get_long(name, def);
+    return def;
+}
+
+// Apply substring scrubs to a passthrough value in place.
+// Bounded: never grows the buffer, always NUL-terminates.
+static void scrub_value_in_place(char* value) {
+    if (!value) return;
+    char buf[PROP_VALUE_MAX];
+    strncpy(buf, value, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    std::string out(buf);
+    bool changed = false;
+    for (int i = 0; kValueScrubs[i].from; i++) {
+        size_t flen = strlen(kValueScrubs[i].from);
+        size_t pos = 0;
+        while ((pos = out.find(kValueScrubs[i].from, pos)) != std::string::npos) {
+            out.replace(pos, flen, kValueScrubs[i].to);
+            pos += strlen(kValueScrubs[i].to);
+            changed = true;
+        }
+    }
+    if (changed && out.size() < sizeof(buf)) {
+        memcpy(value, out.c_str(), out.size() + 1);
+    }
+}
+
 static int hooked_prop_get(const char* name, char* value) {
     const char* s = lookup_spoof(name);
     if (s && value) {
@@ -75,8 +130,13 @@ static int hooked_prop_get(const char* name, char* value) {
         }
     }
     // Forward to original — safe because orig_prop_get is set before
-    // any GOT entry is patched to point to this function
-    if (orig_prop_get) return orig_prop_get(name, value);
+    // any GOT entry is patched to point to this function.
+    // Passthrough values still get substring scrubs (fingerprints etc.).
+    if (orig_prop_get) {
+        int r = orig_prop_get(name, value);
+        if (r >= 0 && value) scrub_value_in_place(value);
+        return r;
+    }
     return -1;
 }
 
@@ -93,6 +153,7 @@ static int hooked_prop_read(const void* pi, char* name, char* value) {
             return static_cast<int>(n);
         }
     }
+    if (value) scrub_value_in_place(value);
     return r;
 }
 
@@ -241,11 +302,16 @@ static bool patch_symbol(const char* sym, void* hook, void** orig) {
 
 } // anonymous namespace
 
+namespace {
+
+bool g_prop_hook_done = false;
+bool g_prop_hook_ok = false;
+
+} // anonymous namespace
+
 bool apply_property_hooks() {
-    static bool done = false;
-    static bool ok = false;
-    if (done) return ok;
-    done = true;
+    if (g_prop_hook_done) return g_prop_hook_ok;
+    g_prop_hook_done = true;
 
     // Each entry point is independent: an app image may import any subset.
     // Success = at least one GOT entry actually rewritten. dlsym alone
@@ -260,8 +326,24 @@ bool apply_property_hooks() {
     any |= patch_symbol("__system_property_read_callback",
                         reinterpret_cast<void*>(hooked_prop_read_cb),
                         reinterpret_cast<void**>(&orig_prop_read_cb));
-    ok = any;
-    return ok;
+    // Poison find for debug markers (never fabricate prop_info).
+    any |= patch_symbol("__system_property_find",
+                        reinterpret_cast<void*>(hooked_prop_find),
+                        reinterpret_cast<void**>(&orig_prop_find));
+    // libcutils/native bool+long getters used by SystemProperties JNI.
+    any |= patch_symbol("__system_property_get_bool",
+                        reinterpret_cast<void*>(hooked_prop_get_bool),
+                        reinterpret_cast<void**>(&orig_prop_get_bool));
+    any |= patch_symbol("__system_property_get_long",
+                        reinterpret_cast<void*>(hooked_prop_get_long),
+                        reinterpret_cast<void**>(&orig_prop_get_long));
+    g_prop_hook_ok = any;
+    return g_prop_hook_ok;
+}
+
+void reset_property_hook_state() {
+    g_prop_hook_done = false;
+    g_prop_hook_ok = false;
 }
 
 } // namespace ghostboot

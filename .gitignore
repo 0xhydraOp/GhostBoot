@@ -30,6 +30,7 @@ desktop.ini
 local.properties
 *.keystore
 *.jks
+.memini/
 
 # Release artifacts (built locally)
 release/*.apk

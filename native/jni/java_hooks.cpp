@@ -29,10 +29,20 @@ bool apply_java_build_patch(void* java_vm) {
     }
 
     // android/os/Build is bootclasspath — FindClass works from any thread.
+    // Full field set: TAGS/TYPE plus fingerprint/brand/device markers that
+    // GPay/HDFC check via Build.FINGERPRINT.contains("test-keys").
     int patched = 0;
     const struct FieldPatch { const char* field; const char* value; } kFields[] = {
-        {"TAGS", "release-keys"},
-        {"TYPE", "user"},
+        {"TAGS",        "release-keys"},
+        {"TYPE",        "user"},
+        {"FINGERPRINT", "google/shamu/shamu:6.0.1/MMB29Q/2480792:user/release-keys"},
+        {"BRAND",       "google"},
+        {"DEVICE",      "shamu"},
+        {"MANUFACTURER","motorola"},
+        {"MODEL",       "Nexus 6"},
+        {"PRODUCT",     "shamu"},
+        {"HOST",        "abfarm"},
+        {"USER",        "android-build"},
     };
 
     jclass build = env->FindClass("android/os/Build");

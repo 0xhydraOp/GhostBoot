@@ -17,6 +17,20 @@ const char* work_dir_path()   { return "/data/adb/ghostboot"; }
 const char* config_file_path() { return "/data/adb/ghostboot/targets.conf"; }
 const char* settings_file_path() { return "/data/adb/ghostboot/settings.conf"; }
 
+// Obfuscated log tag: XOR-folded at compile time, decoded once into a
+// static buffer. No plain "GhostBoot" bytes in .rodata.
+const char* log_tag() {
+    static char tag[10] = {0};
+    static bool init = false;
+    if (!init) {
+        const unsigned char enc[] = {0x1C,0x33,0x34,0x28,0x2F,0x19,0x34,0x34,0x2F};
+        for (int i = 0; i < 9; i++) tag[i] = (char)(enc[i] ^ 0x5B);
+        tag[9] = '\0';
+        init = true;
+    }
+    return tag;
+}
+
 TargetConfig& TargetConfig::instance() {
     static TargetConfig cfg;
     return cfg;

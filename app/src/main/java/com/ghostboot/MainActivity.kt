@@ -174,17 +174,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Diagnostics: what does the native side actually see on disk?
+    // Diagnostics: what does the native side actually see on disk, plus a
+    // live probe inside the target's mount namespace when it is running.
     private fun runVerify() {
         verifyText.value = "Checking..."
         lifecycleScope.launch(Dispatchers.IO) {
             val report = buildString {
                 append(if (RootShell.hasRoot()) "root: OK (su granted)\n" else "root: MISSING — grant root to the app\n")
                 val targets = RootShell.readFile(RootShell.TARGETS_PATH)
+                val entries: List<String>
                 if (targets == null) {
                     append("targets.conf: NOT READABLE\n")
+                    entries = emptyList()
                 } else {
-                    val entries = targets.lines()
+                    entries = targets.lines()
                         .map { it.trim() }
                         .filter { it.isNotEmpty() && !it.startsWith("#") }
                     append("targets.conf: ${entries.size} app(s)\n")
@@ -200,6 +203,22 @@ class MainActivity : ComponentActivity() {
                         .map { it.trim() }
                         .filter { it.isNotEmpty() && !it.startsWith("#") }
                         .forEach { append("  ").append(it).append('\n') }
+                }
+                // Live probe: enter the first target's mount NS if running.
+                val probe = entries.firstOrNull() ?: targetPackages.firstOrNull()
+                if (probe == null) {
+                    append("live probe: no target selected\n")
+                } else {
+                    val (pid, prop, adb) = RootShell.probeTarget(probe)
+                    if (pid.isEmpty()) {
+                        append("live probe: $probe not running — launch it, then re-verify\n")
+                    } else {
+                        append("live verifiedbootstate in $probe: ")
+                            .append(if (prop.isEmpty()) "unknown" else prop).append('\n')
+                        append("/data/adb in target: ").append(
+                            if (adb.isEmpty()) "hidden (empty)" else adb.replace('\n', ';'))
+                            .append('\n')
+                    }
                 }
             }
             withContext(Dispatchers.Main) { verifyText.value = report.trimEnd() }

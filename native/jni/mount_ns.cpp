@@ -28,14 +28,18 @@ bool exists(const char* p) {
 
 bool hide_file(const char* path) {
     if (!exists(path)) return true;
+    // Bind /dev/null: stat() still succeeds (size 0) but exec() fails.
+    // Full ENOENT would need a dangling bind, which kernels reject for
+    // non-existent sources — /dev/null is the safe portable choice.
+    // access(X_OK) callers see failure at exec time.
     return mount("/dev/null", path, nullptr, MS_BIND, nullptr) == 0;
 }
 
 bool hide_dir(const char* path) {
     if (!exists(path)) return true;
-    // Mount empty tmpfs — mode 0755 looks like a normal empty directory.
-    // size=4096 handles kernels that reject size=0.
-    return mount("tmpfs", path, "tmpfs", 0, "size=4096,nr_inodes=2,mode=0755") == 0;
+    // Natural-looking empty dir: typical tmpfs defaults, not a 2-inode
+    // giveaway. mode 0755 matches a normal empty directory.
+    return mount("tmpfs", path, "tmpfs", 0, "size=4k,nr_inodes=1k,mode=0755") == 0;
 }
 
 // LSPosed-related paths are skipped when the user disabled LSPosed hiding.
@@ -53,16 +57,19 @@ bool apply_mount_hiding() {
     // Step 1: create private mount namespace (requires CAP_SYS_ADMIN)
     if (unshare(CLONE_NEWNS) != 0) return false;
 
-    // Step 2: make root mount private — CRITICAL: if this fails, we MUST abort
-    // because subsequent bind mounts would propagate to parent namespace and
-    // hide /data/adb SYSTEM-WIDE, breaking Magisk for every app.
+    // Step 2: make root mount private — CRITICAL: if this fails, we MUST skip
+    // bind mounts (they would propagate to parent namespace and hide
+    // /data/adb SYSTEM-WIDE). Fall through to proc filters only: a filtered
+    // /proc view alone is still better than zero hiding.
+    bool can_bind = true;
     if (mount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr) != 0) {
-        // Mount propagation failed — abort to avoid system-wide corruption
-        return false;
+        LOGW("apply_mount_hiding: MS_PRIVATE failed, bind-hides skipped");
+        can_bind = false;
     }
 
     // Step 3: hiding loop
     int hidden = 0;
+    if (can_bind) {
     for (int i = 0; kHidePaths[i]; i++) {
         const char* p = kHidePaths[i];
         if (!s.lsposed_hide && lsposed_related(p)) continue;
@@ -74,13 +81,17 @@ bool apply_mount_hiding() {
         bool ok = S_ISDIR(st.st_mode) ? hide_dir(p) : hide_file(p);
         if (ok) hidden++;
     }
+    }
 
     // Step 4: proc-visibility filters (best-effort — a missed filter only
     // weakens hiding for that file, never fails the whole pass).
-    if (!apply_proc_filters())
+    // Best-effort even when bind-hides found nothing: a filtered /proc view
+    // alone is still better than zero hiding.
+    bool proc_ok = apply_proc_filters();
+    if (!proc_ok)
         LOGW("apply_mount_hiding: some proc filters failed");
 
-    return hidden > 0;
+    return hidden > 0 || proc_ok;
 }
 
 } // namespace ghostboot

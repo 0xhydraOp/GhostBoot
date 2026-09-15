@@ -83,8 +83,9 @@ fun SettingsUI() {
                 scope.launch { manager.updateLsposedHide(checked) }
             }
 
-            // Keybox rotation
-            SwitchRow("Keybox rotation", settings.keyboxRotation) { checked ->
+            // Keybox rotation (reserved: stored locally, not yet enforced
+            // natively — kept for a future KeyMint bridge; no hiding effect)
+            SwitchRow("Keybox rotation (reserved)", settings.keyboxRotation) { checked ->
                 scope.launch { manager.updateKeyboxRotation(checked) }
             }
 
@@ -98,8 +99,17 @@ fun SettingsUI() {
                 scope.launch { manager.updateAutoStart(checked) }
             }
 
-            // Notification mode
-            Text("Notification mode", style = MaterialTheme.typography.titleSmall)
+            // Detection method is fixed to UsageStats in this build; the
+            // DataStore value is reserved for a future Accessibility backend.
+            Text(
+                "Detection: UsageStats watcher (reserved setting)",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                "Notification mode is controlled by the service; STEALTH/OFF " +
+                "minimise the foreground notification where the platform allows.",
+                style = MaterialTheme.typography.bodySmall
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NotificationMode.entries.forEach { mode ->
                     FilterChip(

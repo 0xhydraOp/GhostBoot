@@ -11,5 +11,5 @@ LOCAL_CPPFLAGS     := -std=c++17 -O2 -fvisibility=hidden -fno-rtti -fno-exceptio
                       -Wall -Wextra -Wno-unused-parameter -fPIC -DANDROID
 LOCAL_LDLIBS       := -llog
 LOCAL_LDFLAGS      := -Wl,--exclude-libs,ALL -Wl,-z,relro -Wl,-z,now -Wl,--gc-sections \
-                      -Wl,-z,max-page-size=0x1000
+                      -Wl,-z,max-page-size=16384
 include $(BUILD_SHARED_LIBRARY)

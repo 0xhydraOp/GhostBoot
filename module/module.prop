@@ -1,6 +1,6 @@
 id=ghostboot
 name=GhostBoot
-version=v1.1.0
-versionCode=103
+version=v1.2.0
+versionCode=104
 author=0xhydraOp
 description=Bootloader spoof & root hide via Zygisk (Magisk/KernelSU/APatch). Per-app mount namespace isolation. Hides Magisk + LSPosed from banking apps. Android 10-15.

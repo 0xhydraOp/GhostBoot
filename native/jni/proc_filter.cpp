@@ -21,6 +21,11 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#ifdef __linux__
+#include <linux/fcntl.h>
+#endif
 #include <unistd.h>
 
 #include <cctype>
@@ -49,9 +54,19 @@ namespace ghostboot {
 namespace {
 
 // Anonymous in-memory file, no disk footprint.
+// Name is disguised as a generic dmabuf (not "gb") so /proc/pid/maps
+// readers see anon_inode:dmabuf instead of an obvious memfd tag.
 int memfd_create_compat(const char* name) {
 #ifdef SYS_memfd_create
-    return (int)syscall((long)SYS_memfd_create, name, (unsigned)MFD_CLOEXEC);
+    const char* n = (name && *name) ? name : "dmabuf";
+    int fd = (int)syscall((long)SYS_memfd_create, n, (unsigned)MFD_CLOEXEC);
+    if (fd >= 0) {
+        // Seal growth+shrink: snapshot is immutable, looks like a sealed
+        // dma-buf rather than a writable scratch memfd. Best-effort:
+        // kernels without sealing support just skip.
+        fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE);
+    }
+    return fd;
 #else
     (void)name;
     return -1;
@@ -110,6 +125,14 @@ bool line_matches_any(const std::string& line, const char* const* tokens) {
 const char* const kMountTokens[] = {
     "data/adb", ".magisk", "magisk", "zygisk", "riru", "lspd",
     "xposed", "substrate", "supersu", "xbin/su", "bin/su", "ghostboot",
+    "magiskd", "zygiskd", "lsposedd",
+    nullptr,
+};
+
+// Unix-domain sockets that leak daemon presence via /proc/net/unix.
+const char* const kUnixTokens[] = {
+    "magisk", "zygisk", "riru", "lspd", "lsposed", "xposed", "edxp",
+    "supersu", "ghostboot",
     nullptr,
 };
 
@@ -145,7 +168,7 @@ bool bind_filtered_snapshot(const char* target, const char* const* tokens) {
     }
     if (!dropped) return true;  // already clean — don't touch proc
 
-    int fd = memfd_create_compat("gb");
+    int fd = memfd_create_compat(nullptr);
     if (fd < 0) return false;
     bool ok = write_all(fd, filtered.data(), filtered.size());
     if (ok) {
@@ -180,7 +203,7 @@ bool sanitize_cmdline() {
     replace_all("unlocked", "locked");
     if (!changed) return true;
 
-    int fd = memfd_create_compat("gb");
+    int fd = memfd_create_compat(nullptr);
     if (fd < 0) return false;
     bool ok = write_all(fd, out.data(), out.size());
     if (ok) {
@@ -229,7 +252,7 @@ bool filter_packages_list() {
     }
     if (!dropped) return true;
 
-    int fd = memfd_create_compat("gb");
+    int fd = memfd_create_compat(nullptr);
     if (fd < 0) return false;
     bool ok = write_all(fd, filtered.data(), filtered.size());
     if (ok) {
@@ -251,12 +274,18 @@ bool apply_proc_filters() {
     ok &= bind_filtered_snapshot("/proc/self/mounts", kMountTokens);
     ok &= bind_filtered_snapshot("/proc/self/mountinfo", kMountTokens);
     ok &= bind_filtered_snapshot("/proc/mounts", kMountTokens);
+    // Daemon sockets leak via net/unix even when mounts are clean (#1
+    // Shamiko-bypass vector). Also cover the global cmdline copy.
+    ok &= bind_filtered_snapshot("/proc/net/unix", kUnixTokens);
+    ok &= bind_filtered_snapshot("/proc/self/net/unix", kUnixTokens);
 
     if (s.root_hide == RootHideLevel::Aggressive) {
         // Our .so mapping + loader traces. Served snapshot predates our
         // binds, so it never lists the filter binds themselves.
+        // Cover per-thread maps too: detectors iterate task/*/maps.
         ok &= bind_filtered_snapshot("/proc/self/maps", kMapsTokens);
         ok &= bind_filtered_snapshot("/proc/self/smaps", kMapsTokens);
+        ok &= bind_filtered_snapshot("/proc/self/task/self/maps", kMapsTokens);
         // Bootloader state echoes outside system properties.
         ok &= sanitize_cmdline();
         // Filesystem-level package hiding (PMS queries still need a

@@ -127,16 +127,26 @@ class GhostBootService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        // Notification mode comes from DataStore; OFF/STEALTH minimise the
+        // foreground notification where the platform allows. Android 8+ still
+        // requires a foreground notification for a foreground service, so
+        // STEALTH uses LOW importance + minimal text rather than removal.
+        val mode = try {
+            runBlocking { SettingsManager(this@GhostBootService).settingsFlow.first() }.notification
+        } catch (_: Exception) {
+            com.ghostboot.settings.NotificationMode.ON
+        }
         val openIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val stealth = mode != com.ghostboot.settings.NotificationMode.ON
         return NotificationCompat.Builder(this, App.CHANNEL_SERVICE)
-            .setContentTitle("GhostBoot Active")
-            .setContentText("Protecting target apps")
+            .setContentTitle(if (stealth) "System Service" else "GhostBoot Active")
+            .setContentText(if (stealth) "Running" else "Protecting target apps")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(if (stealth) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openIntent)
             .build()
     }

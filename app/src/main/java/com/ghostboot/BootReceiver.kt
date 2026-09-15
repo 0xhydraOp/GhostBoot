@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import kotlinx.coroutines.flow.first
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,6 +18,17 @@ class BootReceiver : BroadcastReceiver() {
 
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "com.ghostboot.BOOT_COMPLETE") {
+
+            // Honour the user's auto-start toggle (defaults to true).
+            // DataStore read is blocking here by design: BootReceiver has ~10s
+            // before ANR and the read is a small local file.
+            val autoStart = try {
+                kotlinx.coroutines.runBlocking {
+                    com.ghostboot.settings.SettingsManager(context.applicationContext)
+                        .settingsFlow.first()
+                }.autoStartOnBoot
+            } catch (_: Exception) { true }
+            if (!autoStart) return
 
             val serviceIntent = Intent(context, GhostBootService::class.java).apply {
                 action = "boot_complete"

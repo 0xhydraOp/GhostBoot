@@ -30,6 +30,27 @@ inline constexpr PropSpoof kBuildSpoofs[] = {
     {"ro.build.type",              "user"},
     {"ro.debuggable",              "0"},
     {"ro.secure",                  "1"},
+    {"ro.build.selinux",           "1"},
+    {"ro.oem_unlock_supported",    "0"},
+    {"sys.oem_unlock_allowed",     "0"},
+    {"ro.crypto.state",            "encrypted"},
+    {"ro.kernel.qemu",             "0"},
+    {nullptr, nullptr}
+};
+
+// Substring scrubs applied to any passthrough value (fingerprint,
+// description, incremental, bootmode, etc.). Catches custom-ROM markers
+// that an exact table can never enumerate.
+struct ValueScrub { const char* from; const char* to; };
+
+inline constexpr ValueScrub kValueScrubs[] = {
+    {"test-keys",  "release-keys"},
+    {"dev-keys",   "release-keys"},
+    {"userdebug",  "user"},
+    {":eng/",      ":user/"},
+    {"-eng ",      "-user "},
+    {"unlocked",   "locked"},
+    {"orange",     "green"},
     {nullptr, nullptr}
 };
 
@@ -118,6 +139,9 @@ bool logging_enabled();
 
 // ── Hook API ────────────────────────────────────────────────────────────────
 bool apply_property_hooks();
+// Reset per-fork hook cache so a failed first target doesn't poison later
+// forks (zygote module instance survives across forks).
+void reset_property_hook_state();
 bool apply_mount_hiding();
 // Proc-visibility filters (mounts/mountinfo always; maps/smaps/cmdline/
 // packages.list on AGGRESSIVE). Best-effort: never fatal on failure.
@@ -130,5 +154,8 @@ bool apply_java_build_patch(void* java_vm);
 const char* work_dir_path();
 const char* config_file_path();
 const char* settings_file_path();
+// Runtime-built log tag: avoids a plain "GhostBoot" string in .rodata so
+// `strings` scans don't trivially fingerprint the module.
+const char* log_tag();
 
 } // namespace ghostboot
